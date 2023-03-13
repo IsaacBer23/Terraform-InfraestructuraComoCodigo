@@ -32,7 +32,7 @@ data "aws_subnet" "az_b" {
 #---------------------------
 resource "aws_instance" "servidor_1" {
   ami                    = "ami-0557a15b87f6559cf"
-  instance_type          = "t2.micro"
+  instance_type          = var.tipo_instancia
   subnet_id              = data.aws_subnet.az_a.id
   vpc_security_group_ids = [aws_security_group.mi_grupo_de_seguridad.id]
   tags = {
@@ -42,13 +42,13 @@ resource "aws_instance" "servidor_1" {
   user_data = <<-EOF
               #!/bin/bash
               echo "Hola Terraformers soy servidor 1!" > index.html
-              nohup busybox httpd -f -p 8080 &
+              nohup busybox httpd -f -p ${var.puerto_servidor} &
               EOF
 }
 
 resource "aws_instance" "servidor_2" {
   ami                    = "ami-0557a15b87f6559cf"
-  instance_type          = "t2.micro"
+  instance_type          = var.tipo_instancia
   subnet_id              = data.aws_subnet.az_b.id
   vpc_security_group_ids = [aws_security_group.mi_grupo_de_seguridad.id]
   tags = {
@@ -58,7 +58,7 @@ resource "aws_instance" "servidor_2" {
   user_data = <<-EOF
               #!/bin/bash
               echo "Hola Terraformers soy servidor 2!" > index.html
-              nohup busybox httpd -f -p 8080 &
+              nohup busybox httpd -f -p ${var.puerto_servidor} &
               EOF
 }
 #---------------------------
@@ -71,8 +71,8 @@ resource "aws_security_group" "mi_grupo_de_seguridad" {
     #Acceso solo desde el Load Balancer
     security_groups = [aws_security_group.alb-sg.id]
     description     = "Acceso al puerto 8080 desde el exterior"
-    from_port       = 8080
-    to_port         = 8080
+    from_port       = var.puerto_servidor
+    to_port         = var.puerto_servidor
     protocol        = "TCP"
   }
 }
@@ -96,16 +96,16 @@ resource "aws_security_group" "alb-sg" {
   ingress {
     cidr_blocks = ["0.0.0.0/0"]
     description = "Acceso al puerto 80 desde el exterior"
-    from_port   = 80
-    to_port     = 80
+    from_port   = var.puerto_lb
+    to_port     = var.puerto_lb
     protocol    = "TCP"
   }
 
   egress {
     cidr_blocks = ["0.0.0.0/0"]
     description = "Acceso al puerto 80 desde nuestros servidores"
-    from_port   = 8080
-    to_port     = 8080
+    from_port   = var.puerto_servidor
+    to_port     = var.puerto_servidor
     protocol    = "TCP"
   }
 
@@ -113,7 +113,7 @@ resource "aws_security_group" "alb-sg" {
 
 resource "aws_lb_target_group" "this" {
   name     = "terraformes-alb-target-group"
-  port     = 80
+  port     = var.puerto_lb
   vpc_id   = data.aws_vpc.default.id
   protocol = "HTTP"
 
@@ -121,7 +121,7 @@ resource "aws_lb_target_group" "this" {
     enabled  = true
     matcher  = "200"
     path     = "/"
-    port     = "8080"
+    port     = var.puerto_servidor
     protocol = "HTTP"
   }
 }
@@ -130,20 +130,20 @@ resource "aws_lb_target_group_attachment" "servidor_1" {
   target_group_arn = aws_lb_target_group.this.arn
   #Target ID = Instancia
   target_id = aws_instance.servidor_1.id
-  port      = 8080
+  port      = var.puerto_servidor
 }
 
 resource "aws_lb_target_group_attachment" "servidor_2" {
   target_group_arn = aws_lb_target_group.this.arn
   #Target ID = Instancia
   target_id = aws_instance.servidor_2.id
-  port      = 8080
+  port      = var.puerto_servidor
 }
 
 resource "aws_lb_listener" "this" {
   #Referenciamos nuestro Load Balancer
   load_balancer_arn = aws_lb.alb.arn
-  port              = 80
+  port              = var.puerto_lb
   protocol          = "HTTP"
 
   default_action {
